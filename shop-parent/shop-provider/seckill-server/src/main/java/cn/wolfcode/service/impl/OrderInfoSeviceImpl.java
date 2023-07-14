@@ -94,6 +94,10 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
         }
     }
 
+    /**
+     * TCC模式
+     * @param orderNo
+     */
     @Override
     @GlobalTransactional
     public void payIntergral(String orderNo) {
@@ -125,8 +129,12 @@ public class OrderInfoSeviceImpl implements IOrderInfoService {
         return orderInfoMapper.find(orderNo);
     }
 
+    /**
+     * AT模式
+     * @param orderInfo
+     */
     @Override
-    @Transactional
+    @GlobalTransactional
     public void refundIntergral(OrderInfo orderInfo) {
         //插入日志
         RefundLog refundLog = new RefundLog();
