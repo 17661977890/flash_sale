@@ -41,7 +41,8 @@ public class UsableIntegralServiceImpl implements IUsableIntegralService {
     @Transactional
     public void decrIntergralTry(OperateIntergralVo operateIntergralVo, BusinessActionContext context) {
         System.out.println("try方法");
-        //插入日志
+        // 防止空悬挂（利用xid+branchId做唯一索引 如果cancel的时候已经插入了，说明发生了空回滚，这边就会插入失败）
+        // 插入日志
         AccountTransaction transaction = new AccountTransaction();
         transaction.setState(AccountTransaction.STATE_TRY);
         transaction.setTxId(context.getXid());
@@ -65,6 +66,7 @@ public class UsableIntegralServiceImpl implements IUsableIntegralService {
         System.out.println("commit方法");
         AccountTransaction accountTransaction = accountTransactionMapper.get(context.getXid(), context.getBranchId());
         if(accountTransaction!=null){
+            // 幂等性处理：状态机
             if(AccountTransaction.STATE_TRY==accountTransaction.getState()){
                 JSONObject jsonObject = (JSONObject) context.getActionContext("operateIntergralVo");
                 OperateIntergralVo vo = jsonObject.toJavaObject(OperateIntergralVo.class);
@@ -79,9 +81,10 @@ public class UsableIntegralServiceImpl implements IUsableIntegralService {
         System.out.println("cancel方法");
         JSONObject jsonObject = (JSONObject) context.getActionContext("operateIntergralVo");
         OperateIntergralVo vo = jsonObject.toJavaObject(OperateIntergralVo.class);
+        // 防止空回滚：try没执行，cancel先执行，根据唯一索引查询日志数据 不存在就说明是空回滚
         AccountTransaction accountTransaction = accountTransactionMapper.get(context.getXid(), context.getBranchId());
         if(accountTransaction==null){
-            //插入日志
+            //插入日志，try阶段可以查询 如果已经存在 不操作 防止空悬挂
             AccountTransaction transaction = new AccountTransaction();
             transaction.setState(AccountTransaction.STATE_CANCEL);
             transaction.setTxId(context.getXid());
@@ -94,6 +97,7 @@ public class UsableIntegralServiceImpl implements IUsableIntegralService {
             accountTransactionMapper.insert(transaction);
             return;
         }
+        // 幂等性处理：状态机
         if(AccountTransaction.STATE_TRY==accountTransaction.getState()){
             usableIntegralMapper.unFreezeIntergral(vo.getUserId(),vo.getValue());
             accountTransactionMapper.updateAccountTransactionState(context.getXid(), context.getBranchId(),AccountTransaction.STATE_CANCEL,AccountTransaction.STATE_TRY);
